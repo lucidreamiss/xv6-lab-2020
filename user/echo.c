@@ -2,6 +2,15 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
+/**
+ * @brief 
+ * 
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int 
+ */
+
 int
 main(int argc, char *argv[])
 {
