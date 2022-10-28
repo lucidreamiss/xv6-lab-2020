@@ -24,8 +24,6 @@ void xargs(char *argv[]) {
  * 3. kernel/param.h定义了MAXARG，或许对你定义argv array有帮助
  * 4. 记得修改Makefile中的UPROGS，记得make clean
  * 
- * 这里需要状态机，我们明天大部分精力会用来开发这个程序，来看如何编写该命令行
- * 
  * 1. 当 command line中输出xargs时，这时我们会用标准输入中的每一行去执行xargs后的命令行
  * 忽略标准输入这点，xargs后面跟随的就是一条命令，一条待补充参数的命令，待补充参数就来自xargs前执行得到的结果
  * 
@@ -43,7 +41,6 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // 对于sizeof有个疑问，他是怎么求出数组长度的，难不成在定义buf[512]的时候，这块区域就已经被获取到了？
     memset(buf, 0, sizeof(buf));
 
     for (i = 1; i < argc; i++) {
