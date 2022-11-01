@@ -19,9 +19,12 @@ extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
+extern char etext[];  // kernel.ld sets this to end of kernel code.
+
 extern char trampoline[]; // trampoline.S
 
 // initialize the proc table at boot time.
+
 void
 procinit(void)
 {
@@ -30,16 +33,6 @@ procinit(void)
   initlock(&pid_lock, "nextpid");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
-
-      // Allocate a page for the process's kernel stack.
-      // Map it high in memory, followed by an invalid
-      // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
   }
   kvminithart();
 }
@@ -89,6 +82,10 @@ allocpid() {
 // If found, initialize state required to run in the kernel,
 // and return with p->lock held.
 // If there are no free procs, or a memory allocation fails, return 0.
+
+// 申请进程
+// 从proc进程池中寻找状态为UNUSED proc
+// 并对该proc做一些初始化的处理工作
 static struct proc*
 allocproc(void)
 {
@@ -121,6 +118,23 @@ found:
     return 0;
   }
 
+  p->kpagetable = proc_kpagetable(p);
+
+  if (p->kpagetable == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  
+  mappages(p->kpagetable, va, PGSIZE, (uint64)pa, PTE_R | PTE_W);
+  
+  p->kstack = va;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -142,6 +156,17 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
+  
+  uvmunmap(p->kpagetable, p->kstack, 1, 1);
+
+  p->kstack = 0;
+
+  if (p->kpagetable)
+    proc_freekpagetable(p->kpagetable);
+  
+  p->kpagetable = 0;
+
+
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -185,6 +210,86 @@ proc_pagetable(struct proc *p)
   return pagetable;
 }
 
+pagetable_t
+proc_kpagetable(struct proc *p) {
+  
+  pagetable_t kpagetable;
+
+  kpagetable = uvmcreate();
+
+  if (kpagetable == 0) return 0;
+
+  // uart registers
+  
+  //仿照kvminit中对内核页表的初始化，对kpagetable也进行初始化
+  //记录映射了多少
+  int mapcount = 0;
+
+  if (mappages(kpagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) != 0) {
+    goto MAP_FAILD;
+  }
+
+  mapcount++;
+
+  if (mappages(kpagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W) != 0) {
+    goto MAP_FAILD;
+  }
+
+  mapcount++;
+  
+  // if (mappages(kpagetable, CLINT, 0x10000, CLINT, PTE_R | PTE_W) != 0) {
+  //   goto MAP_FAILD;
+  // }
+
+  mapcount++;
+
+  if (mappages(kpagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) != 0) {
+    goto MAP_FAILD;
+  }
+
+  mapcount++;
+
+  if (mappages(kpagetable, KERNBASE, (uint64)etext-KERNBASE, KERNBASE, PTE_R | PTE_X) != 0) {
+    goto MAP_FAILD;
+  }
+
+  mapcount++;
+
+  if (mappages(kpagetable, (uint64)etext, PHYSTOP-(uint64)etext, (uint64)etext, PTE_R | PTE_W) != 0) {
+    goto MAP_FAILD;
+  }
+
+  mapcount++;
+
+  if (mappages(kpagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) != 0) {
+    goto MAP_FAILD;
+  }
+
+  return kpagetable;
+MAP_FAILD:
+  switch (mapcount)
+  {
+  case 6:
+    uvmunmap(kpagetable, (uint64)etext, (PHYSTOP-(uint64)etext) / PGSIZE, 0);
+  case 5:
+    uvmunmap(kpagetable, KERNBASE, ((uint64)etext-KERNBASE) / PGSIZE, 0);
+  case 4:
+    uvmunmap(kpagetable, PLIC, 0x400000 / PGSIZE, 0);
+  // case 3:
+  //   uvmunmap(kpagetable, CLINT, 1, 0);
+  case 2:
+    uvmunmap(kpagetable, VIRTIO0, 1, 0);
+  case 1:
+    uvmunmap(kpagetable, UART0, 1, 0);
+  case 0:
+    uvmfree(kpagetable, 0);      
+  }
+
+  return 0;
+}
+
+
+
 // Free a process's page table, and free the
 // physical memory it refers to.
 void
@@ -193,6 +298,29 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
+}
+
+
+/**
+ * @brief 遍历页表，回收页表项，不对叶子节点回收，要求这样，不回收物理页面。
+ * 为什么不回收物理页面呢，对于进程内核页表副本来说，每个进程的内核页表映射到的部分物理内存是一致的，所以不能释放掉。
+ * @param pagetable 
+ */
+void proc_freekpagetable(pagetable_t pagetable) {
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    
+    // pte指向的是下一级页表而非叶子页表，此时需要遍历下一级页表
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+      uint64 child = PTE2PA(pte);
+      proc_freekpagetable((pagetable_t)child);
+    } else if(pte & PTE_V) {
+      // 对于叶子节点，不手动释放，仅解除映射
+      pagetable[i] = 0;
+    }
+  }
+  kfree((void*)pagetable);
 }
 
 // a user program that calls exec("/init")
@@ -473,10 +601,16 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
+        kvminithart();
+        
         c->proc = 0;
 
         found = 1;
