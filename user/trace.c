@@ -3,9 +3,12 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int
-main(int argc, char *argv[])
-{
+
+/**
+ * trace就是对当前进程开启了一些东西，开启后，后续的一系列操作都会打印系统调用
+ *  
+ */
+int main(int argc, char *argv[]) {
   int i;
   char *nargv[MAXARG];
 
