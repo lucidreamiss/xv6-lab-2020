@@ -150,6 +150,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->trace = 0;
 }
 
 // Create a user page table for a given process,
@@ -294,6 +295,8 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  np->trace = p->trace;
 
   release(&np->lock);
 
@@ -691,5 +694,16 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+
+void nproc(uint64 *nproc) {
+  struct proc *p;
+  *nproc = 0;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    if (p->state == UNUSED) {
+      continue;
+    }
+    (*nproc)++;
   }
 }
