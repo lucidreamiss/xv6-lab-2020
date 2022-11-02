@@ -347,7 +347,10 @@ userinit(void)
   // allocate one user page and copy init's instructions
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
+  
   p->sz = PGSIZE;
+
+  u2kvmcopy(p->kpagetable, p->pagetable, 0, PGSIZE);
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
@@ -374,6 +377,7 @@ growproc(int n)
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
@@ -391,7 +395,7 @@ fork(void)
   struct proc *p = myproc();
 
   // Allocate process.
-  if((np = allocproc()) == 0){
+  if((np = allocproc()) == 0) {
     return -1;
   }
 
@@ -401,7 +405,10 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
   np->sz = p->sz;
+
+  u2kvmcopy(np->kpagetable, np->pagetable, 0, np->sz);
 
   np->parent = p;
 
@@ -422,6 +429,8 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+
 
   release(&np->lock);
 
@@ -604,7 +613,6 @@ scheduler(void)
 
         w_satp(MAKE_SATP(p->kpagetable));
         sfence_vma();
-
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
