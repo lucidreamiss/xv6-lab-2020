@@ -2553,11 +2553,14 @@ execout(char *s)
         *(char*)(a + 4096 - 1) = 1;
       }
 
+
       // free a few pages, in order to let exec() make some
       // progress.
       for(int i = 0; i < avail; i++)
         sbrk(-4096);
-      
+
+
+
       close(1);
       char *args[] = { "echo", "x", 0 };
       exec("echo", args);

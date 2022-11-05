@@ -67,7 +67,37 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if (r_scause() == 13 || r_scause() == 15) {
+    uint64 va = r_stval();
+    /**
+     * 1. 拿到va
+     * 2. 根据va寻找到pte，检查pte的cow标记
+     * 3. 若引用计数为1，则恢复读写并清除cow标记
+     * 4. 若引用计数大于1，则复制pa到新的mem上，同时该进程绑定va->mem
+     * 5. 原pa的引用计数--; 完成操作
+     * note：注意处理kalloc以及mappages时内存不足的操作
+     */
+    pte_t* pte = walk(p->pagetable, va, 0);
+    if (pte == 0 || !((*pte) & PTE_F)) {
+        exit(-1);
+    }
+
+    uint64 pa = PTE2PA(*pte);
+
+    if (krefcnt((void *)pa) == 1) {
+      *pte = (*pte | PTE_W) & ~PTE_F;
+    } else if (krefcnt((void *)pa) > 1) {
+      char* mem;
+      if ((mem = kalloc()) == 0) exit(-1);
+      memmove(mem, (const void *)pa, PGSIZE);
+      
+      *pte = (PA2PTE(mem) | PTE_FLAGS(*pte) | PTE_W) & ~PTE_F;
+      
+      kdecref((void *)pa);
+    }
+  }
+   else {
+   
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
