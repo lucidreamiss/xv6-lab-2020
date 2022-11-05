@@ -60,8 +60,12 @@ sys_sleep(void)
 
   if(argint(0, &n) < 0)
     return -1;
+
+   backtrace();
+
   acquire(&tickslock);
   ticks0 = ticks;
+
   while(ticks - ticks0 < n){
     if(myproc()->killed){
       release(&tickslock);
@@ -94,4 +98,32 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+
+/**
+ * @brief 
+ * 两个参数：1. 周期 2. 函数地址
+ * 
+ * @return uint64 
+ */
+uint64 sys_sigalarm(void) {
+  int n;
+  void (*func)();
+  if (argint(0, &n) < 0) {
+    return -1;
+  }
+  if (argaddr(1, (uint64*)&func) < 0) {
+    return -1;
+  }
+  
+  myproc()->alarm_interval = n;
+  myproc()->alarm_handler = func;
+  return 0;   
+}
+
+uint64 sys_sigreturn(void) {
+  memmove(myproc()->trapframe, myproc()->alarm_trapframe, sizeof(struct trapframe));
+  myproc()->alarm_ing = 0;
+  return 0;
 }

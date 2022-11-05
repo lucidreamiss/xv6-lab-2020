@@ -93,7 +93,7 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
-
+  
   // these are private to the process, so p->lock need not be held.
   uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
@@ -103,4 +103,11 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  int alarm_interval;          // 滴答次数
+  int alarm_ticks;             // 报警触发滴答数
+  void (*alarm_handler)();     // 报警触发函数
+  int alarm_ing;               // 是否正在报警，这里的目的是，报警函数如果执行时间过长，同样会触发中断，可能会让报警函数无限递归
+  struct trapframe *alarm_trapframe;  // 报警帧
+
 };

@@ -1,0 +1,21 @@
+{
+    "files.associations": {
+        "*.c": "c",
+        "*.asm": "c",
+        "thread": "c",
+        "stop_token": "c",
+        "vector": "c",
+        "__locale": "c",
+        "__string": "c",
+        "cstdlib": "c",
+        "memory_resource": "c",
+        "locale": "c",
+        "ostream": "c",
+        "system_error": "c",
+        "typeinfo": "c",
+        "version": "c",
+        "*.tcc": "c",
+        "numeric": "c",
+        "istream": "c"
+    }
+}
