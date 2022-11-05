@@ -38,17 +38,35 @@ sys_wait(void)
   return wait(p);
 }
 
+/**
+ * @brief 变大则直接变大，变小，需要unmap去掉一些pte
+ * 
+ * 去除通过修改ondealloc实现
+ * 
+ * @return uint64 
+ */
 uint64
 sys_sbrk(void)
 {
   int addr;
   int n;
 
+
   if(argint(0, &n) < 0)
     return -1;
+
+  if (n < 0 && myproc()->sz + n >= 0) {
+      uint64 oldsz = myproc()->sz;
+      uint64 newsz = oldsz + n;
+      if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
+      int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+      uvmunmap(myproc()->pagetable, PGROUNDUP(newsz), npages, 1);
+    }
+  }
+
   addr = myproc()->sz;
-  if(growproc(n) < 0)
-    return -1;
+  myproc()->sz += n;
+
   return addr;
 }
 
