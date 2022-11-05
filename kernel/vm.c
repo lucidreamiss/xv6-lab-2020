@@ -157,7 +157,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
     if(*pte & PTE_V)
-      panic("remap");
+      exit(-1);
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -180,12 +180,11 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0
-        || *pte == 0) {
+    if((pte = walk(pagetable, a, 0)) == 0) {
       continue;
     }
     if((*pte & PTE_V) == 0) {
-      panic("uvmunmap: not mapped");
+      continue;
     }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
@@ -317,10 +316,10 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0 || *pte == 0)
+    if((pte = walk(old, i, 0)) == 0)
       continue;
     if((*pte & PTE_V) == 0)
-        panic("uvmcopy: page not present");
+        continue;
       pa = PTE2PA(*pte);
       flags = PTE_FLAGS(*pte);
       if((mem = kalloc()) == 0)

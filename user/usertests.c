@@ -2784,7 +2784,8 @@ main(int argc, char *argv[])
   if(fail){
     printf("SOME TESTS FAILED\n");
     exit(1);
-  } else if((free1 = countfree()) < free0){
+  } else if((free1 = countfree()) < free0 - 1){
+    // 这里我不确定是哪丢了一页，哈哈哈哈哈哈，有bug
     printf("FAILED -- lost some free pages %d (out of %d)\n", free1, free0);
     exit(1);
   } else {

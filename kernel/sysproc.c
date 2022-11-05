@@ -51,22 +51,22 @@ sys_sbrk(void)
   int addr;
   int n;
 
-
   if(argint(0, &n) < 0)
     return -1;
 
-  if (n < 0 && myproc()->sz + n >= 0) {
-      uint64 oldsz = myproc()->sz;
-      uint64 newsz = oldsz + n;
-      if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
-      int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
-      uvmunmap(myproc()->pagetable, PGROUNDUP(newsz), npages, 1);
-    }
+  struct proc* p = myproc();
+  addr = p->sz;
+  uint64 sz = p->sz;
+
+  if(n > 0) {
+    // lazy allocation
+    p->sz += n;
+  } else if(sz + n > 0) {
+    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    p->sz = sz;
+  } else {
+    return -1;
   }
-
-  addr = myproc()->sz;
-  myproc()->sz += n;
-
   return addr;
 }
 
